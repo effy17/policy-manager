@@ -1,5 +1,5 @@
 import React from "react";
-import { Table, TableHead, TableRow, TableCell, TableBody, Grid, Button } from "@mui/material";
+import { Table, TableHead, TableRow, TableCell, TableBody, Grid, Button, CircularProgress, Alert } from "@mui/material";
 import { Droppable } from "react-beautiful-dnd";
 import { Rule } from "../types/Rule";
 import RuleTableRow from "./RuleTableRow";
@@ -15,6 +15,8 @@ interface Props {
     moveMutation: any;
     deleteMutation: any;
     editMutation: any;
+    isLoading?: boolean;
+    error?: unknown;
 }
 
 function isAnySourceRule(rule: Rule) {
@@ -32,12 +34,28 @@ export default function RuleTableInner({
                                            moveMutation,
                                            deleteMutation,
                                            editMutation,
+                                           isLoading,
+                                           error,
                                        }: Props) {
     const regularRules = allRules.filter((r) => !isAnySourceRule(r));
     const anySourceRules = allRules.filter(isAnySourceRule);
 
-    // Defensive fallback to avoid React-Beautiful-DND errors
-    // Make sure we always render the Droppable body even if no draggable items
+    // Loading and Error state for inner table
+    if (isLoading) {
+        return (
+            <Grid container justifyContent="center" alignItems="center" style={{ minHeight: 120 }}>
+                <CircularProgress />
+            </Grid>
+        );
+    }
+    if (error) {
+        return (
+            <Alert severity="error" sx={{ mt: 2 }}>
+                {String(error)}
+            </Alert>
+        );
+    }
+
     return (
         <>
             <Table size="small">
@@ -64,13 +82,11 @@ export default function RuleTableInner({
                         </TableCell>
                     </TableRow>
                 </TableHead>
-
                 <Droppable droppableId="rules" direction="vertical" type="RULE">
                     {(provided) => (
                         <TableBody
                             ref={provided.innerRef}
                             {...provided.droppableProps}
-                            // Make sure style is not missing - add minHeight to avoid zero-height issues
                             style={{ minHeight: "100px" }}
                         >
                             {regularRules.length === 0 && anySourceRules.length === 0 && (
@@ -81,11 +97,8 @@ export default function RuleTableInner({
                                 </TableRow>
                             )}
 
-                            {/* Draggable rows */}
                             {regularRules.map((rule, idx) => {
-                                // Make sure id is string
                                 const id = rule.id != null ? String(rule.id) : `temp-${idx}`;
-
                                 return (
                                     <RuleTableRow
                                         key={id}
@@ -100,15 +113,13 @@ export default function RuleTableInner({
                                 );
                             })}
 
-                            {/* This placeholder MUST be here for correct droppable height */}
                             {provided.placeholder}
 
-                            {/* Non-draggable rows */}
                             {anySourceRules.map((rule) => (
                                 <RuleTableRow
                                     key={rule.id}
                                     rule={rule}
-                                    index={-1} // no drag for these
+                                    index={-1}
                                     isDraggable={false}
                                     editingRow={editingRow}
                                     setEditingRow={setEditingRow}
@@ -121,7 +132,6 @@ export default function RuleTableInner({
                 </Droppable>
             </Table>
 
-            {/* Pagination controls */}
             <Grid container justifyContent="space-between" alignItems="center" sx={{ mt: 2 }}>
                 <Grid item>
                     <Button size="small" disabled={page === 1} onClick={() => setPage(page - 1)}>

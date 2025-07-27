@@ -1,12 +1,11 @@
 import React, { useState } from "react";
 import {
     TableRow, TableCell, TextField, FormControl, Select, MenuItem,
-    Button, Chip, Box, FormHelperText, Grid
+    Button, Chip, Box, FormHelperText, Grid, CircularProgress, Alert
 } from "@mui/material";
 import { Draggable } from "react-beautiful-dnd";
 import { Rule, Source, Destination } from "../types/Rule";
 
-// Helper: Only action can be edited for any-source rules
 function isAnySourceRule(rule: Rule) {
     return Array.isArray(rule.sources) && rule.sources.length === 0;
 }
@@ -26,8 +25,8 @@ interface Props {
     isDraggable: boolean;
     editingRow: number | null;
     setEditingRow: (id: number | null) => void;
-    editMutation: any;
-    deleteMutation: any;
+    editMutation: any;      // React Query mutation object
+    deleteMutation: any;    // React Query mutation object
 }
 
 export default function RuleTableRow({
@@ -69,65 +68,104 @@ export default function RuleTableRow({
         editMutation.mutate({ id: rule.id, data: buf }, { onSuccess: () => setEditingRow(null) });
     };
 
+    // Loading/Error state
+    const rowIsLoading = editMutation.isLoading || deleteMutation.isLoading;
+    const rowError = editMutation.isError ? editMutation.error : (deleteMutation.isError ? deleteMutation.error : null);
+
     // DRAGGABLE only if isDraggable and index >= 0
     if (isDraggable && index >= 0) {
-        // Ensure draggableId is a string and unique
         const draggableId = String(rule.id);
 
         return (
             <Draggable draggableId={draggableId} index={index} isDragDisabled={false}>
                 {(prov) => (
-                    <TableRow
-                        ref={prov.innerRef}
-                        {...prov.draggableProps}
-                        hover
-                    >
-                        <TableCell
-                            {...prov.dragHandleProps}
-                            sx={{ cursor: "grab", width: 36, textAlign: "center" }}
+                    <>
+                        <TableRow
+                            ref={prov.innerRef}
+                            {...prov.draggableProps}
+                            hover
                         >
-                            <span
-                                style={{ fontSize: 20, display: "inline-block", width: 24, height: 24, lineHeight: "24px" }}
-                                tabIndex={-1} aria-label="Drag"
-                            >☰</span>
-                        </TableCell>
-                        <RuleTableRowInner
-                            rule={rule}
-                            buf={buf}
-                            isEditing={editingRow === rule.id}
-                            setEditingRow={setEditingRow}
-                            setBuf={setBuf}
-                            handleFieldChange={handleFieldChange}
-                            saveEdit={saveEdit}
-                            isChanged={isChanged()}
-                            deleteMutation={deleteMutation}
-                        />
-                    </TableRow>
+                            <TableCell
+                                {...prov.dragHandleProps}
+                                sx={{ cursor: "grab", width: 36, textAlign: "center" }}
+                            >
+                                <span
+                                    style={{ fontSize: 20, display: "inline-block", width: 24, height: 24, lineHeight: "24px" }}
+                                    tabIndex={-1} aria-label="Drag"
+                                >☰</span>
+                            </TableCell>
+                            <RuleTableRowInner
+                                rule={rule}
+                                buf={buf}
+                                isEditing={editingRow === rule.id}
+                                setEditingRow={setEditingRow}
+                                setBuf={setBuf}
+                                handleFieldChange={handleFieldChange}
+                                saveEdit={saveEdit}
+                                isChanged={isChanged()}
+                                deleteMutation={deleteMutation}
+                                rowIsLoading={rowIsLoading}
+                                rowError={rowError}
+                            />
+                        </TableRow>
+                              {rowIsLoading && (
+                                  <TableRow>
+                                      <TableCell colSpan={7} align="center">
+                                          <CircularProgress size={18} />
+                                      </TableCell>
+                                  </TableRow>
+                              )}
+                        {rowError && (
+                            <TableRow>
+                                <TableCell colSpan={7}>
+                                    <Alert severity="error">{String(rowError)}</Alert>
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </>
                 )}
             </Draggable>
         );
     }
     // Non-draggable row (either no drag or index = -1)
     return (
-        <TableRow hover>
-            <TableCell>
-                <span
-                    style={{ fontSize: 20, color: "#999", cursor: "not-allowed" }}
-                    tabIndex={-1} aria-label="No Drag"
-                >☰</span>
-            </TableCell>
-            <RuleTableRowInner
-                rule={rule}
-                buf={buf}
-                isEditing={editingRow === rule.id}
-                setEditingRow={setEditingRow}
-                setBuf={setBuf}
-                handleFieldChange={handleFieldChange}
-                saveEdit={saveEdit}
-                isChanged={isChanged()}
-                deleteMutation={deleteMutation}
-            />
-        </TableRow>
+        <>
+            <TableRow hover>
+                <TableCell>
+                    <span
+                        style={{ fontSize: 20, color: "#999", cursor: "not-allowed" }}
+                        tabIndex={-1} aria-label="No Drag"
+                    >☰</span>
+                </TableCell>
+                <RuleTableRowInner
+                    rule={rule}
+                    buf={buf}
+                    isEditing={editingRow === rule.id}
+                    setEditingRow={setEditingRow}
+                    setBuf={setBuf}
+                    handleFieldChange={handleFieldChange}
+                    saveEdit={saveEdit}
+                    isChanged={isChanged()}
+                    deleteMutation={deleteMutation}
+                    rowIsLoading={rowIsLoading}
+                    rowError={rowError}
+                />
+            </TableRow>
+            {rowIsLoading && (
+                <TableRow>
+                    <TableCell colSpan={7} align="center">
+                        <CircularProgress size={18} />
+                    </TableCell>
+                </TableRow>
+            )}
+            {rowError && (
+                <TableRow>
+                    <TableCell colSpan={7}>
+                        <Alert severity="error">{String(rowError)}</Alert>
+                    </TableCell>
+                </TableRow>
+            )}
+        </>
     );
 }
 
@@ -142,9 +180,11 @@ interface InnerProps {
     saveEdit: () => void;
     isChanged: boolean;
     deleteMutation: any;
+    rowIsLoading?: boolean;
+    rowError?: any;
 }
 function RuleTableRowInner({
-                               rule, buf, isEditing, setEditingRow, handleFieldChange, saveEdit, isChanged, deleteMutation,
+                               rule, buf, isEditing, setEditingRow, handleFieldChange, saveEdit, isChanged, deleteMutation, rowIsLoading,
                            }: InnerProps) {
     const anySource = isAnySourceRule(rule);
 
@@ -155,12 +195,12 @@ function RuleTableRowInner({
                 {anySource
                     ? rule.name
                     : isEditing ? (
-                        <TextField fullWidth size="small" value={buf.name} onChange={e => handleFieldChange("name", e.target.value)} />
+                        <TextField fullWidth size="small" value={buf.name} onChange={e => handleFieldChange("name", e.target.value)} disabled={rowIsLoading} />
                     ) : rule.name}
             </TableCell>
             <TableCell>
                 {isEditing ? (
-                    <FormControl fullWidth size="small">
+                    <FormControl fullWidth size="small" disabled={rowIsLoading}>
                         <Select value={buf.action} onChange={e => handleFieldChange("action", e.target.value as any)}>
                             <MenuItem value="Allow">Allow</MenuItem>
                             <MenuItem value="Block">Block</MenuItem>
@@ -182,6 +222,7 @@ function RuleTableRowInner({
                                                    handleFieldChange("sources", arr);
                                                }}
                                                sx={{ minWidth: 120 }}
+                                               disabled={rowIsLoading}
                                     />
                                     <TextField label="Source email" size="small" value={s.email}
                                                onChange={e => {
@@ -190,6 +231,7 @@ function RuleTableRowInner({
                                                    handleFieldChange("sources", arr);
                                                }}
                                                sx={{ minWidth: 120 }}
+                                               disabled={rowIsLoading}
                                     />
                                     <Button size="small" color="primary"
                                             onClick={() => {
@@ -197,6 +239,7 @@ function RuleTableRowInner({
                                                 handleFieldChange("sources", arr);
                                             }}
                                             sx={{ minWidth: 64 }}
+                                            disabled={rowIsLoading}
                                     >Remove</Button>
                                 </Box>
                             </Grid>
@@ -205,7 +248,7 @@ function RuleTableRowInner({
                             <Button size="small" onClick={() => {
                                 const arr = [...buf.sources, { name: "", email: "" }];
                                 handleFieldChange("sources", arr);
-                            }}>Add Source</Button>
+                            }} disabled={rowIsLoading}>Add Source</Button>
                         </Grid>
                     </Grid>
                 ) : (
@@ -233,6 +276,7 @@ function RuleTableRowInner({
                                                        handleFieldChange("destinations", arr);
                                                    }}
                                                    sx={{ minWidth: 120 }}
+                                                   disabled={rowIsLoading}
                                         />
                                         <TextField label="Destination address" size="small" value={d.address}
                                                    onChange={e => {
@@ -241,6 +285,7 @@ function RuleTableRowInner({
                                                        handleFieldChange("destinations", arr);
                                                    }}
                                                    sx={{ minWidth: 120 }}
+                                                   disabled={rowIsLoading}
                                         />
                                         <Button size="small" color="primary"
                                                 onClick={() => {
@@ -248,6 +293,7 @@ function RuleTableRowInner({
                                                     handleFieldChange("destinations", arr);
                                                 }}
                                                 sx={{ minWidth: 64 }}
+                                                disabled={rowIsLoading}
                                         >Remove</Button>
                                     </Box>
                                 </Grid>
@@ -256,7 +302,7 @@ function RuleTableRowInner({
                                 <Button size="small" onClick={() => {
                                     const arr = [...buf.destinations, { name: "", address: "" }];
                                     handleFieldChange("destinations", arr);
-                                }}>Add Destination</Button>
+                                }} disabled={rowIsLoading}>Add Destination</Button>
                             </Grid>
                         </Grid>
                     ) : (
@@ -272,20 +318,20 @@ function RuleTableRowInner({
                     <Grid container spacing={1}>
                         <Grid item>
                             <Button size="small" variant="contained" color="primary"
-                                    onClick={saveEdit} disabled={!isChanged}>Save</Button>
+                                    onClick={saveEdit} disabled={!isChanged || rowIsLoading}>Save</Button>
                         </Grid>
                         <Grid item>
                             <Button size="small" variant="outlined"
-                                    onClick={() => setEditingRow(null)}>Cancel</Button>
+                                    onClick={() => setEditingRow(null)} disabled={rowIsLoading}>Cancel</Button>
                         </Grid>
                     </Grid>
                 ) : (
                     <Grid container spacing={1}>
                         <Grid item>
-                            <Button size="small" onClick={() => setEditingRow(rule.id)}>Edit</Button>
+                            <Button size="small" onClick={() => setEditingRow(rule.id)} disabled={rowIsLoading}>Edit</Button>
                         </Grid>
                         <Grid item>
-                            <Button size="small" color="error" onClick={() => deleteMutation.mutate(rule.id)}>Delete</Button>
+                            <Button size="small" color="error" onClick={() => deleteMutation.mutate(rule.id)} disabled={rowIsLoading}>Delete</Button>
                         </Grid>
                     </Grid>
                 )}

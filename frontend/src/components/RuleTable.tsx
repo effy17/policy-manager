@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import Grid from "@mui/material/Grid";
-import { TextField, FormControl, InputLabel, Select, MenuItem, Button, Typography, Paper, TableContainer } from "@mui/material";
+import {
+    TextField, FormControl, InputLabel, Select, MenuItem, Button,
+    Typography, Paper, TableContainer, CircularProgress, Alert
+} from "@mui/material";
 import { DragDropContext, DropResult } from "react-beautiful-dnd";
 import { useRules, useMoveRule, useDeleteRule, useEditRule } from "../hooks/useRules";
 import { getDecimalIndex } from "../utils/decimalIndex";
@@ -10,9 +13,9 @@ import RuleTableInner from "./RuleTableInner";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100];
 
-export default function RuleTable2() {
+export default function RuleTable() {
     const [page, setPage] = useState(1);
-    const [limit, setLimit] = useState(10);
+    const [limit, setLimit] = useState(5);
     const [search, setSearch] = useState("");
     const [formOpen, setFormOpen] = useState(false);
     const [filterField, setFilterField] = useState<keyof Rule>("name");
@@ -29,8 +32,22 @@ export default function RuleTable2() {
 
     useEffect(() => { setPage(1); }, [search, filterField, sortBy, order, limit]);
 
-    if (isLoading) return <div>Loading…</div>;
-    if (isError) return <div>Error: {String(error)}</div>;
+    // Loading State
+    if (isLoading) {
+        return (
+            <Grid container justifyContent="center" alignItems="center" style={{ minHeight: 200 }}>
+                <CircularProgress />
+            </Grid>
+        );
+    }
+    // Error State
+    if (isError) {
+        return (
+            <Alert severity="error" sx={{ mt: 4 }}>
+                {String(error)}
+            </Alert>
+        );
+    }
     if (!data) return <div>No rules to display</div>;
 
     let { data: allRules, total } = data;
@@ -41,17 +58,15 @@ export default function RuleTable2() {
         allRules = allRules.filter(r => JSON.stringify(r.destinations).toLowerCase().includes(search.toLowerCase()));
     }
 
-    // Filter only rules that are draggable (have sources.length > 0) for drag-drop handling
+    // Only regular rules are draggable
     const regularRules = allRules.filter(r => r.sources.length > 0);
 
-    // onDragEnd handler fix:
     const onDragEnd = (result: DropResult) => {
         if (!result.destination) return;
         const from = result.source.index;
         const to = result.destination.index;
         if (from === to) return;
 
-        // Make a copy to reorder only draggable rules
         const newOrder = Array.from(regularRules);
         const [removed] = newOrder.splice(from, 1);
         newOrder.splice(to, 0, removed);
@@ -60,14 +75,15 @@ export default function RuleTable2() {
         const nextIdx = newOrder[to + 1]?.ruleIndex;
         const newIndex = getDecimalIndex(prevIdx, nextIdx);
 
-        // Call mutation with moved rule id and newIndex
         moveMutation.mutate({ id: removed.id, newIndex });
     };
 
     return (
         <>
             <RuleForm open={formOpen} onClose={() => setFormOpen(false)} />
-            <Typography variant="h4" align="center" sx={{ mt: 3, mb: 1 }}>Policy Manager</Typography>
+            <Typography variant="h4" align="center" sx={{ mt: 3, mb: 1 }}>
+                Policy Manager
+            </Typography>
             <Grid container spacing={2} alignItems="center" sx={{ my: 2 }}>
                 <Grid item xs={3} sm={1} md={2}>
                     <TextField fullWidth label="Search" size="small" value={search} onChange={e => setSearch(e.target.value)} />
