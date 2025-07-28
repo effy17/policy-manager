@@ -1,10 +1,11 @@
 import React, { ChangeEvent, FormEvent, useState } from "react";
 import {
     Card, CardContent, CardActions, Grid, TextField, Button, Select, MenuItem,
-    FormControl, InputLabel, Checkbox, FormControlLabel, Paper, Typography, Dialog
+    FormControl, InputLabel, Checkbox, FormControlLabel, Paper, Typography, Dialog, Alert
 } from "@mui/material";
 import { useCreateRule } from "../hooks/useRules";
 import { Source, Destination } from "../types/Rule";
+import axios from "axios";
 
 interface RuleFormProps {
     open: boolean;
@@ -182,6 +183,13 @@ export default function RuleForm({ open, onClose }: RuleFormProps) {
                                 </Paper>
                             </Grid>
                         </Grid>
+                        {createMutation.isError && (
+                            <Alert severity="error" sx={{ mt: 2 }}>
+                                {axios.isAxiosError(createMutation.error)
+                                    ? createMutation.error.response?.data?.error || createMutation.error.message
+                                    : String(createMutation.error)}
+                            </Alert>
+                        )}
                     </CardContent>
                     <CardActions sx={{ justifyContent: "center" }}>
                         <Button type="submit" variant="contained" color="primary" disabled={createMutation.isLoading}>
@@ -191,11 +199,6 @@ export default function RuleForm({ open, onClose }: RuleFormProps) {
                             Cancel
                         </Button>
                     </CardActions>
-                    {createMutation.isError && <div style={{ color: "red", padding: 12 }}>
-                        Error: {createMutation.error instanceof Error
-                        ? createMutation.error.message
-                        : String(createMutation.error)}
-                    </div>}
                 </Card>
             </form>
         </Dialog>
