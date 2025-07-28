@@ -84,7 +84,7 @@ export const getRules = async ({
 export const createRule = async (ruleData: Partial<Rule>) => {
     const tid = ruleData.tenantId ?? 1;
 
-    // Fetch all existing rules, sorted by ruleIndex
+    // Fetch all existing rules sorted by ruleIndex
     const allRules = await Rule.findAll({
         where: { tenantId: tid },
         order: [["ruleIndex", "ASC"]],
@@ -93,63 +93,70 @@ export const createRule = async (ruleData: Partial<Rule>) => {
     const anySourceRules = allRules.filter(r => Array.isArray(r.sources) && r.sources.length === 0);
     const regularRules = allRules.filter(r => Array.isArray(r.sources) && r.sources.length > 0);
 
+    const isAnySource = Array.isArray(ruleData.sources) && ruleData.sources.length === 0;
+
     let desiredIndex: number;
-    if (Array.isArray(ruleData.sources) && ruleData.sources.length === 0) {
-        // Any Source rule: put after ALL existing rules
+
+    if (isAnySource) {
+        // CASE 1: any-source rule → always added last
         const maxIndex = allRules.length
             ? Math.max(...allRules.map(r => Number(r.ruleIndex)))
             : 0;
         desiredIndex = maxIndex + 1;
     } else {
-        // Normal rule
-        // If user gave a ruleIndex, use it, else after last regular rule (or before any "Any Source" rule)
-        if (typeof ruleData.ruleIndex === "number") {
-            desiredIndex = ruleData.ruleIndex;
-        } else if (regularRules.length) {
-            // After last regular
-            const maxRegular = Math.max(...regularRules.map(r => Number(r.ruleIndex)));
-            // But before anySource min
-            const minAnySource = anySourceRules.length
-                ? Math.min(...anySourceRules.map(r => Number(r.ruleIndex)))
-                : Infinity;
-            desiredIndex = minAnySource === Infinity ? maxRegular + 1 : minAnySource - 1;
-        } else {
-            // No regulars, put at 1
-            desiredIndex = 1;
-        }
-
-        // If desiredIndex overlaps with anySourceRules or is above, we must bump anySourceRules to the end
-        const minAnySource = anySourceRules.length
+        // CASE 2: regular rule
+        const minAnySourceIndex = anySourceRules.length
             ? Math.min(...anySourceRules.map(r => Number(r.ruleIndex)))
             : Infinity;
-        if (desiredIndex >= minAnySource) {
-            // Get max ruleIndex after insert
-            let maxIndex = allRules.length
-                ? Math.max(desiredIndex, ...allRules.map(r => Number(r.ruleIndex)))
-                : desiredIndex;
-            // For each anySource, update to maxIndex+1, maxIndex+2, ...
-            for (let i = 0; i < anySourceRules.length; ++i) {
-                maxIndex = maxIndex + 1;
-                await anySourceRules[i].update({ ruleIndex: maxIndex });
+
+        if (typeof ruleData.ruleIndex === "number") {
+            desiredIndex = ruleData.ruleIndex;
+
+            // If duplicate with a regular rule, reject
+            const duplicate = regularRules.find(r => Number(r.ruleIndex) === desiredIndex);
+            if (duplicate) {
+                throw new Error("That priority is already taken");
             }
-            // Now, the new rule's index can stay as desiredIndex (since bumped all anySource rules)
+
+            // If overlaps any-source rules → bump any-source rules
+            if (desiredIndex >= minAnySourceIndex) {
+                let nextIndex = desiredIndex + 1;
+                for (const rule of anySourceRules.sort((a, b) => Number(a.ruleIndex) - Number(b.ruleIndex))) {
+                    await rule.update({ ruleIndex: nextIndex++ });
+                }
+            }
+
+        } else {
+            // No ruleIndex specified → insert after last regular, before any-source
+            const maxRegular = regularRules.length
+                ? Math.max(...regularRules.map(r => Number(r.ruleIndex)))
+                : 0;
+
+            desiredIndex = minAnySourceIndex === Infinity ? maxRegular + 1 : minAnySourceIndex - 1;
+
+            // If overlaps any-source rules → bump them
+            if (desiredIndex >= minAnySourceIndex) {
+                let nextIndex = desiredIndex + 1;
+                for (const rule of anySourceRules.sort((a, b) => Number(a.ruleIndex) - Number(b.ruleIndex))) {
+                    await rule.update({ ruleIndex: nextIndex++ });
+                }
+            }
         }
     }
 
-    // Ensure there are NO duplicates (shouldn't happen, but just in case, auto-increment)
-    let existing = allRules.find(r => Number(r.ruleIndex) === desiredIndex);
-    while (existing) {
-        desiredIndex += 1;
-        existing = allRules.find(r => Number(r.ruleIndex) === desiredIndex);
+    // Double check uniqueness in allRules
+    const conflict = allRules.find(r => Number(r.ruleIndex) === desiredIndex);
+    if (conflict) {
+        throw new Error("That priority is already taken");
     }
 
-    // Create the new rule
     return Rule.create({
         ...ruleData,
         tenantId: tid,
         ruleIndex: desiredIndex,
     });
 };
+
 
 
 
